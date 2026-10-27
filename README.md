@@ -2,12 +2,30 @@
 
 **One shared rules, hooks and skills layer for Claude Code, Codex, OpenCode, DeepSeek, Kimi and Grok Build, tuned by measurement to spend fewer tokens.**
 
-This is the setup Clupai runs every day: several agent sessions on the same repos at once, one set of rules, and a
-bake-off-backed rule for which model does what.
+Hi, I'm Clupai. This is the setup I run every day, not a framework I built for other people. I usually have
+several agent sessions open on the same repos at once, across two Claude accounts and a handful of other CLIs, and I
+check on most of them from my phone. Without shared rules they tripped over each other's files, started duplicate
+Docker stacks and burned quota on work a cheaper model could do.
+
+So everything here does one of three jobs:
+
+- **Keep parallel sessions out of each other's way:** file claims, turn queues, shared stacks, rules learned from failures.
+- **Spend fewer tokens:** every routing rule below comes from a benchmark or bake-off I ran on my own work.
+- **Let me work from my phone:** short replies with the answer first, a recap at the end, and an alert when a session needs me.
+
+Take what's useful. Expect it to reflect my machine (macOS, kitty) and my habits; see [Limits](#limits).
+
+## My day with it
+
+1. I open sessions in kitty or [MonoCode](#monocode), one per task, often on the same repo.
+2. Each session claims the files it edits, so two never edit one file at once; they message each other to hand over.
+3. Routine coding runs on a cheap model at low effort; Codex reviews every diff before I call it done.
+4. When a session finishes or needs me, I get a sound and a notification; a question left 5 minutes goes to my phone. Replies end with a `Close:` line saying if I can shut it.
+5. When something breaks in a way another session could repeat, it becomes a guardrail every later session sees.
 
 ## Why it saves tokens
 
-Measured Sep-Oct 2026. The routing benchmark used tasks built from real work with planted bugs and defects
+Measured on my own work, Sep-Oct 2026. The routing benchmark used tasks built from real work with planted bugs and defects
 ([docs/routing.md](docs/routing.md)); the bake-off used real commits from one app ([docs/bake-off.md](docs/bake-off.md)).
 
 | Rule | Measured effect |
@@ -95,7 +113,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.example.NAME.plist
 ## MonoCode
 
 [MonoCode](https://github.com/hardbeat920/monocode) (MIT) is a desktop GUI for coding agents: each tab is a session
-of a CLI you already have. The owner runs a fork, [Clupai8o0/monocode](https://github.com/Clupai8o0/monocode),
+of a CLI you already have. I run a fork, [Clupai8o0/monocode](https://github.com/Clupai8o0/monocode),
 branch `mine`, that reads this layer: claims tags on files (`claims.py list --json`), a stacks panel
 (`stacks.py list --json`), close badges from a reply's `Close:` line (the on-the-go output style writes one), peer-message cards, a re-alert after 5 min,
 and "ring at my places", which `hooks/alerts.py` follows. Details: [docs/monocode.md](docs/monocode.md).
@@ -204,7 +222,7 @@ Every code change gets a Codex review of the diff before it counts as done.
 
 - **macOS first.** The outside-model sandbox uses `sandbox-exec`; the memory guard reads macOS stats; alerts use
   macOS sounds and kitty notifications.
-- **One person's data.** The routing benchmark ran 2 runs per setup; the bake-off ran each task once per model, on one app.
+- **One person's data: mine.** The routing benchmark ran 2 runs per setup; the bake-off ran each task once per model, on one app.
   Run `bakeoff/` on yours.
 - **Model names and prices age fast.** All numbers are from Sep-Oct 2026. Codex ran gpt-5.6-sol in the routing
   benchmark and GPT-6 Astra in the bake-off.
@@ -218,7 +236,7 @@ Every code change gets a Codex review of the diff before it counts as done.
 - **Outside models may keep or train on what you send.** That is what `model-policy.json` is for.
 - **The `ui/` palette follows a kitty accent file** if you have one; otherwise it uses the default.
 
-## Third-party skills used alongside (not included)
+## Third-party skills I use alongside (not included)
 
 | Skills | Upstream |
 |---|---|
