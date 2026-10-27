@@ -1,0 +1,1 @@
+{ "name": "side-checklist", "version": "0.1.0", "description": "A checklist pane beside the session that Claude keeps up to date and you tick off", "types": "./types/index.d.ts" }

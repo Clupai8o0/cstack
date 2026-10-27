@@ -10,6 +10,7 @@ bakeoff/bakeoff.py
 bakeoff/quality.py
 bakeoff/review.py
 hooks/agent_hook.py
+hooks/alerts.py
 hooks/claims.py
 hooks/codex_hook.py
 hooks/effort_gate.py
@@ -20,6 +21,12 @@ hooks/queues.py
 hooks/reset.py
 hooks/session_mirror.py
 hooks/stacks.py
+mods/side-checklist/.claude-plugin/plugin.json
+mods/side-checklist/hooks/hooks.json
+mods/side-checklist/hooks/register.tsx
+mods/side-checklist/tests/checklist.test.tsx
+mods/side-checklist/tsconfig.json
+mods/side-checklist/types/index.d.ts
 output-styles/on-the-go.md
 scripts/build_index.py
 scripts/second_opinion.py
@@ -31,6 +38,7 @@ skills/_core/tool-scoping/SKILL.md
 skills/_core/vault-skills/SKILL.md
 skills/production-ready/SKILL.md
 skills/production-ready/checklist.md
+skills/production-ready/security-lists.md
 ui/palette.json
 ui/palette.py
 ui/statusline.py

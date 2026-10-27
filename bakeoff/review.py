@@ -9,7 +9,7 @@ HEAD. Answers are saved under review-runs/ with random ids so they can be graded
     python3 review.py blind        # print answers under their random ids, for grading
     python3 review.py score        # grades.json (id -> list of bug keys found) -> table per reviewer
 """
-import argparse, json, os, random, shutil, subprocess, sys, threading, time
+import argparse, json, os, shlex, random, shutil, subprocess, sys, threading, time
 from pathlib import Path
 CLUPAI_HOME = os.path.expanduser(os.environ.get('CLUPAI_HOME') or (
     '~/clupai' if os.path.isdir(os.path.expanduser('~/clupai'))
@@ -27,12 +27,17 @@ REVIEWERS = {
     'opus55-r2': ('claude', 'claude-opus-5-5'),   # second run, same setup
     'fable-r2': ('claude', 'claude-fable-5-1'),
     'astra': ('codex', 'gpt-6-astra'),
+    'sol': ('codex', 'gpt-6-sol'),
+    'luna': ('codex', 'gpt-6-luna'),
     'kimi': ('so', 'kimi:kimi-k3'),
     'ds-flash': ('so', 'dsh:deepseek-flash'),
     'gemini': ('so', 'agy:gemini-3.8-flash-high'),
     'ds41-or': ('so', 'opencode:openrouter/deepseek/deepseek-v4.1-flash'),
     'mimo-or': ('so', 'opencode:openrouter/xiaomi/mimo-v2.6-pro'),
     'hy4-or': ('so', 'opencode:openrouter/tencent/hy4-preview'),
+    'qwenflash-or': ('so', 'opencode:openrouter/qwen/qwen3.8-flash'),
+    'mimoflash-or': ('so', 'opencode:openrouter/xiaomi/mimo-v2.6-flash'),
+    'inkling-or': ('so', 'opencode:openrouter/thinkingmachines/inkling'),
     'grok47-or': ('so', 'opencode:openrouter/x-ai/grok-4.7'),
     'qwenmax-or': ('so', 'opencode:openrouter/qwen/qwen3.8-max-0902'),
     'fugu-or': ('so', 'opencode:openrouter/sakana/fugu-max'),
@@ -40,9 +45,29 @@ REVIEWERS = {
     'grok-build': ('so', 'grok:grok-4.7'),
     'muse-or': ('so', 'opencode:openrouter/meta/muse-spark-1.3'),
     'glm-or': ('so', 'opencode:openrouter/z-ai/glm-5.3'),
+    'glm-or-r2': ('so', 'opencode:openrouter/z-ai/glm-5.3'),
     'grok-or': ('so', 'opencode:openrouter/x-ai/grok-4.6'),
     'minimax-or': ('so', 'opencode:openrouter/minimax/minimax-m3'),
+    'sonnet55': ('claude', 'claude-sonnet-5-5'),      # 29 Sep check, high effort like the other Claude reviewers
+    'sonnet55-r2': ('claude', 'claude-sonnet-5-5'),
+    'haiku55': ('claude', 'claude-haiku-5-5'),        # 10 Oct check, high effort like the other Claude reviewers
+    'haiku55-r2': ('claude', 'claude-haiku-5-5'),
+    'sol61': ('codex', 'gpt-6.1-sol'),                # released 29 Sep (DevDay)
+    'sol61-r2': ('codex', 'gpt-6.1-sol'),
+    # 10 Oct workflows: an Opus 5.5 high lead splits the review across subagents pinned to one model, then verifies
+    'glm-zai': ('zai', 'glm-5.3'),                    # Z.ai's own API via Claude Code (keychain zai-api)
+    'glm-zai-r2': ('zai', 'glm-5.3'),
+    'o-rev-haiku': ('claude-orch', 'claude-opus-5-5', ['haiku']),
+    'o-rev-sonnet': ('claude-orch', 'claude-opus-5-5', ['sonnet']),
+    # Gemini 4 Argon on Vertex via OpenCode (reasoning high), 14 Oct
+    'argon': ('so', 'opencode:vertex/gemini-4-argon'),
+    'argon-r2': ('so', 'opencode:vertex/gemini-4-argon'),
+    # Meta Muse Code CLI on the Muse subscription, reasoning high, file writes off, 27 Oct
+    'muse': ('muse', 'muse-wonder-full-1.0'),
+    'muse-r2': ('muse', 'muse-wonder-full-1.0'),
 }
+# main by default (owner, 10 Oct): cx is only upgraded when needed. 'main' = the default login
+CLAUDE_DIR = os.path.expanduser(os.environ.get('BAKEOFF_CLAUDE_DIR', 'main'))
 LOCK = threading.Lock()
 if os.environ.get('BAKEOFF_NODE_BIN'):   # e.g. a pinned Node version's bin dir
     os.environ['PATH'] = os.environ['BAKEOFF_NODE_BIN'] + ':' + os.environ['PATH']
@@ -97,7 +122,7 @@ def review(case, name):
     out_json = OUT / f'{case["id"]}__{name}.json'
     if out_json.exists():
         return
-    kind, model = REVIEWERS[name]
+    kind, model, *subs = REVIEWERS[name]
     if name.endswith('-or'):
         sys.path.insert(0, str(HERE))
         import bakeoff
@@ -109,10 +134,29 @@ def review(case, name):
     t0 = time.time()
     cost = None
     try:
-        if kind == 'claude':
-            env = dict(os.environ, CLAUDE_CONFIG_DIR=os.path.expanduser(os.environ.get('BAKEOFF_CLAUDE_CONFIG_DIR', '~/.claude')))
+        if kind in ('claude', 'claude-orch', 'zai'):
+            env = {k: v for k, v in os.environ.items() if k != 'CLAUDE_CONFIG_DIR'}
+            if CLAUDE_DIR != 'main':  # main's login lives under the default dir
+                env['CLAUDE_CONFIG_DIR'] = CLAUDE_DIR
+            if kind == 'zai':
+                sys.path.insert(0, str(HERE))
+                import bakeoff
+                env = bakeoff.zai_env()
             cmd = (f'claude -p --model {model} --effort high --output-format json --permission-mode bypassPermissions '
-                   f'--strict-mcp-config --disallowedTools Agent,Edit,Write --max-budget-usd 10')
+                   f'--strict-mcp-config --max-budget-usd 10 ')
+            if kind in ('claude', 'zai'):
+                cmd += '--disallowedTools Agent,Edit,Write'
+            else:
+                agents = {f'reviewer-{m}': {'description': f'Code reviewer on {m}: reviews the part of the change it is given.',
+                                            'prompt': 'You review code changes for real defects. Read-only: never edit files. '
+                                                      'Report each defect with file, line and the wrong behaviour.',
+                                            'model': m, 'effort': 'high'} for m in subs[0]}
+                calls = '; '.join(f'reviewer-{m}: model "{m}", effort "high"' for m in subs[0])
+                cmd += '--disallowedTools Edit,Write --agents ' + shlex.quote(json.dumps(agents))
+                prompt += (f'\n\nYou are the lead reviewer. Split the review across your reviewer subagent(s) '
+                           f'({", ".join(agents)}), several in parallel if useful, passing model and effort exactly as '
+                           f'listed ({calls}); this experiment fixes the models, so do not pick others. Then check each '
+                           f'finding against the code yourself and report only the defects you confirmed.')
             for _ in range(6):
                 code, out = sh(cmd, cwd=wt, timeout=TIMEOUT, env=env, stdin=prompt)
                 if 'hit your session limit' not in out:
@@ -129,12 +173,36 @@ def review(case, name):
                            f'-C "{wt}" -o "{last}" -', cwd=wt, timeout=TIMEOUT, stdin=prompt)
             answer = last.read_text() if last.exists() else out
             last.unlink(missing_ok=True)
+        elif kind == 'muse':
+            sys.path.insert(0, str(HERE))
+            import bakeoff
+            pf = WORK / f'review-{case["id"]}-{name}.prompt'
+            pf.write_text(prompt)
+            for netfails in range(4):  # Meta transport drops: retry after 5 min, count them
+                code, answer, u = bakeoff.muse_exec(pf, wt, model, extra='--disable-write', timeout=TIMEOUT)
+                answer = str(answer)
+                if bakeoff.MUSE_NETFAIL not in answer or netfails == 3:
+                    break
+                time.sleep(300)
+            cost = {'tokens': (u.get('models') or [{}])[0], 'allowance': u.get('allowance'), 'netfails': netfails}
+            pf.unlink(missing_ok=True)
         else:
             pf = WORK / f'review-{case["id"]}-{name}.prompt'
             pf.write_text(prompt)
+            env = None
+            if 'vertex/' in model:
+                sys.path.insert(0, str(HERE))
+                import bakeoff
+                env = bakeoff.vertex_env()
             code, out = sh(f'python3 "{SO}" "{pf}" --cwd "{wt}" --ladder {model} --timeout {TIMEOUT}',
-                           cwd=wt, timeout=TIMEOUT + 120)
+                           cwd=wt, timeout=TIMEOUT + 120, env=env)
             lines = out.splitlines()
+            for l in lines:  # the route's own usage line; OpenCode prices Vertex from opencode-vertex.json
+                if l.startswith('{"provider"'):
+                    try:
+                        cost = (json.loads(l).get('usage') or {}).get('cost') or cost
+                    except ValueError:
+                        pass
             answer = '\n'.join(l for l in lines if not l.startswith('{"p'))
             pf.unlink(missing_ok=True)
         if name.endswith('-or'):  # an OpenRouter reviewer stops when the key is nearly spent

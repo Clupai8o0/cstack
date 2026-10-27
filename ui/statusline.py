@@ -120,6 +120,21 @@ def context(data):
     return tokens, (min(100, round(pct)) if pct is not None else None)
 
 
+def compact_at():
+    """Tokens at which Claude Code auto-compacts (CLAUDE_CODE_AUTO_COMPACT_WINDOW), from the env or the
+    account's settings.json; None when unset."""
+    v = os.environ.get('CLAUDE_CODE_AUTO_COMPACT_WINDOW')
+    if not v:
+        try:
+            cfg = os.environ.get('CLAUDE_CONFIG_DIR') or os.path.expanduser('~/.claude')
+            v = (json.load(open(os.path.join(cfg, 'settings.json'))).get('env') or {}).get(
+                'CLAUDE_CODE_AUTO_COMPACT_WINDOW')
+        except (OSError, ValueError, AttributeError):
+            return None
+    n = num(v)
+    return int(n) if n and n > 0 else None
+
+
 def compactions(data):
     """How often this session was compacted (auto or /compact): the compact_boundary lines in its transcript.
     Only the bytes added since the last render are read; the offset and count are kept per session."""
@@ -213,6 +228,15 @@ def main():
     except OSError:
         pass
     sid = data.get('session_id') or ''
+    if data.get('layout') == 'composer':
+        # MonoCode's composer already shows model, effort, branch, context and limits,
+        # and draws the rest in its own theme, so it gets plain data.
+        sys.stdout.write(json.dumps({
+            'account': acct,
+            'compactions': compactions(data),
+            'compact_at': compact_at(),
+        }))
+        return 0
     sep = fg('sep', ' │ ')
     groups = []
 

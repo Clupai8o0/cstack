@@ -10,7 +10,9 @@ all accounts and agents.
                                  wait for healthy, run after_up. Already running: just lease it and print ports.
   stacks.py down NAME            drop your lease; the last lease out stops the stack (docker compose stop, data kept)
                                  if stacks.py started it
-  stacks.py list                 stacks, whether running, who holds them, and containers no stack owns
+  stacks.py list [--json]        stacks, whether running, who holds them, and containers no stack owns
+  stacks.py stop NAME ["why"]    stop a stack or device now and drop every lease on it (a person's choice, e.g.
+                                 MonoCode's Stacks panel; sessions use down)
   stacks.py add NAME --dir DIR [-f FILE ...] [--project P] [--service S ...] [--after-up CMD] [--note TEXT]
   stacks.py reap [--dry-run]     launchd, every 10 min (com.example.stacks-reaper):
                                  - stops a stack that `up` started and nobody leases, after grace_min minutes idle
@@ -246,6 +248,16 @@ def owner():
     return {'session': 'manual', 'name': 'manual'}
 
 
+def take_lease(cfg, name, me, why):
+    """Replaces this owner's lease on name with a fresh one; returns the other holders."""
+    with State() as s:
+        s.prune(cfg)
+        ls = [l for l in s.data['leases'].get(name, []) if not same_owner(l, me)]
+        s.data['leases'][name] = ls + [{**me, 'why': (why or '')[:200], 'at': time.time()}]
+        s.data['idle_since'].pop(name, None)
+    return ls
+
+
 def same_owner(a, b):
     if a.get('pid') and b.get('pid'):
         return a['pid'] == b['pid'] and a.get('procStart') == b.get('procStart')
@@ -265,11 +277,7 @@ def up(name, why):
         print(f'no stack {name}. Known: {", ".join(cfg["stacks"])}. Add one with: stacks.py add')
         return 2
     me = owner()
-    with State() as s:
-        s.prune(cfg)
-        ls = [l for l in s.data['leases'].get(name, []) if not same_owner(l, me)]
-        s.data['leases'][name] = ls + [{**me, 'why': (why or '')[:200], 'at': time.time()}]
-        s.data['idle_since'].pop(name, None)
+    ls = take_lease(cfg, name, me, why)
     if not start_runtime(cfg):
         print(f'{cfg.get("runtime")} did not start within 3 minutes. Lease kept; run up again once docker info works.')
         return 1
@@ -277,6 +285,7 @@ def up(name, why):
         if not got:
             print(f'{name}: another start has held the lock for 20 min. Lease kept; check stacks.py list.')
             return 1
+        ls = take_lease(cfg, name, me, why)  # again: a force stop that held the lock first dropped it
         if stack_running(st):
             with State() as s:
                 managed = name in s.data['started']
@@ -368,37 +377,116 @@ def managed_projects(cfg, started):
     return {cfg['stacks'][n]['project'] for n in started if n in cfg['stacks']}
 
 
-def show():
+def snapshot():
+    """Every stack and device with its state and lease holders, plus running containers no stack owns."""
     cfg = load_config()
     with State() as s:
         s.prune(cfg)
         leases, idle, started = s.data['leases'], s.data['idle_since'], s.data['started']
     up_ = daemon_up()
-    print(f'runtime: {cfg.get("runtime")} ({"up" if up_ else "down"}), context {CTX[1] if CTX else "default"}')
+    now = time.time()
+
+    def holders(name):
+        return [{'name': l.get('name', '?'), 'why': l.get('why', ''),
+                 'session': None if l.get('session') == 'manual' else l.get('session')}
+                for l in leases.get(name, [])]
+
+    out = {'runtime': cfg.get('runtime'), 'up': up_, 'context': CTX[1] if CTX else None,
+           'stacks': [], 'devices': [], 'loose': [], 'looseError': None}
     for name, st in cfg['stacks'].items():
         try:
             state = ('running' if stack_running(st) else 'stopped') if up_ else 'stopped'
         except (DockerError, subprocess.TimeoutExpired):
-            state = 'unknown (docker call failed)'
-        if state == 'running' and name not in started:
-            state = 'running (started by hand: stopped only after unmanaged_h)'
-        held = ', '.join(f'{l["name"]} ({l["why"][:40]})' if l.get('why') else l['name'] for l in leases.get(name, []))
-        extra = f', idle {int((time.time() - idle[name]) / 60)} min' if name in idle and state == 'running' else ''
-        print(f'  {name:22} {state:8} {("held by " + held) if held else "no lease"}{extra}')
+            state = 'unknown'
+        managed = name in started
+        out['stacks'].append({
+            'name': name, 'state': state, 'byHand': state == 'running' and not managed, 'holders': holders(name),
+            'idleMin': int((now - idle[name]) / 60) if name in idle and state == 'running' and managed else None})
     for name, dev in cfg.get('devices', {}).items():
         try:
             state = 'booted' if device_running(dev) else 'off'
         except (subprocess.SubprocessError, OSError, ValueError, DeviceMissing):
             state = 'unknown'
-        if state == 'booted' and name not in started:
-            state = 'booted (by hand)'
-        held = ', '.join(l['name'] for l in leases.get(name, []))
-        print(f'  {name:22} {state:8} {("held by " + held) if held else "no lease"}  [{dev["kind"]} device]')
+        out['devices'].append({'name': name, 'kind': dev['kind'], 'state': state,
+                               'byHand': state == 'booted' and name not in started, 'holders': holders(name)})
     if up_:
         own = {st['project'] for st in cfg['stacks'].values()}  # listed above already
-        for n, _, status, proj in [c for c in containers() if c[3] not in own]:
-            print(f'  (no stack) {n:30} {status}  project={proj or "-"}')
+        try:
+            out['loose'] = [{'name': n, 'status': status, 'project': proj or None}
+                            for n, _, status, proj in containers() if proj not in own]
+        except (DockerError, subprocess.TimeoutExpired) as e:
+            out['looseError'] = str(e) or 'docker ps timed out'
+    return out
+
+
+def show(as_json=False):
+    snap = snapshot()
+    if as_json:
+        print(json.dumps(snap))
+        return 0
+    print(f'runtime: {snap["runtime"]} ({"up" if snap["up"] else "down"}), context {snap["context"] or "default"}')
+    for s in snap['stacks']:
+        state = {'unknown': 'unknown (docker call failed)'}.get(s['state'], s['state'])
+        if s['byHand']:
+            state = 'running (started by hand: stopped only after unmanaged_h)'
+        held = ', '.join(f'{h["name"]} ({h["why"][:40]})' if h['why'] else h['name'] for h in s['holders'])
+        extra = f', idle {s["idleMin"]} min' if s['idleMin'] is not None else ''
+        print(f'  {s["name"]:22} {state:8} {("held by " + held) if held else "no lease"}{extra}')
+    for d in snap['devices']:
+        state = 'booted (by hand)' if d['byHand'] else d['state']
+        held = ', '.join(h['name'] for h in d['holders'])
+        print(f'  {d["name"]:22} {state:8} {("held by " + held) if held else "no lease"}  [{d["kind"]} device]')
+    for c in snap['loose']:
+        print(f'  (no stack) {c["name"]:30} {c["status"]}  project={c["project"] or "-"}')
+    if snap['looseError']:
+        print(f'  (no stack) could not list containers: {snap["looseError"]}')
     return 0
+
+
+def force_stop(name, why):
+    """Stop a stack or device now, whoever holds it, then drop every lease taken before this call.
+    For a person's explicit choice (MonoCode's Stacks panel), never for a session cleaning up after itself."""
+    cfg = load_config()
+    dev = cfg.get('devices', {}).get(name)
+    st = cfg['stacks'].get(name)
+    if not (dev or st):
+        print(f'no stack or device {name}')
+        return 2
+    asked = time.time()
+    me = owner()
+    with stack_lock(name, wait=300) as got:
+        if not got:
+            print(f'{name} is being started or stopped by another session; try again shortly')
+            return 1
+        with State() as s:
+            s.prune(cfg)
+            held = [l.get('name', '?') for l in s.data['leases'].get(name, [])]
+        reason = f'stopped by {me["name"]}{" " + why if why else ""}'
+        if held:
+            reason += f', dropping the leases of {", ".join(held)}'
+        done = None  # already stopped: still drop the leases, or the holders keep it from being reaped next time
+        if dev:
+            if device_running(dev):
+                ok = device_stop(name, dev, reason)
+            else:
+                ok, done = True, f'{name} was not booted'
+        else:
+            if not daemon_up():  # unreachable is not proof it stopped (a busy daemon can time out), so keep the leases
+                print(f'{name} was not running (docker not reachable; leases kept)')
+                return 0
+            if stack_running(st):
+                ok = stop_stack(name, st, reason)
+            else:
+                ok, done = True, f'{name} was not running'
+        if ok:  # leases go only once it is stopped; an `up` waiting on the lock re-takes its lease after this
+            with State() as s:
+                ls = [l for l in s.data['leases'].get(name, []) if l.get('at', 0) > asked]
+                if ls:
+                    s.data['leases'][name] = ls
+                else:
+                    s.data['leases'].pop(name, None)
+    print(done or (f'{name} stopped (data kept)' if ok else f'{name}: stop FAILED; see {LOG}'))
+    return 0 if ok else 1
 
 
 def add(a):
@@ -817,15 +905,12 @@ def kill_stale_idb(dry=False):
 def device_up(cfg, name, why):
     dev = cfg['devices'][name]
     me = owner()
-    with State() as s:
-        s.prune(cfg)
-        ls = [l for l in s.data['leases'].get(name, []) if not same_owner(l, me)]
-        s.data['leases'][name] = ls + [{**me, 'why': (why or '')[:200], 'at': time.time()}]
-        s.data['idle_since'].pop(name, None)
+    ls = take_lease(cfg, name, me, why)
     with stack_lock(name, wait=900) as got:
         if not got:
             print(f'{name}: another boot has held the lock for 15 min. Lease kept; check stacks.py list.')
             return 1
+        ls = take_lease(cfg, name, me, why)  # again: a force stop that held the lock first dropped it
         if device_running(dev):
             print(f'{name} is already booted (shared with {", ".join(l["name"] for l in ls) or "nobody else"}). '
                   'Leased; do not boot another device.')
@@ -960,7 +1045,10 @@ def main():
     p.add_argument('name')
     p.add_argument('why', nargs='?', default='')
     sub.add_parser('down').add_argument('name')
-    sub.add_parser('list')
+    sub.add_parser('list').add_argument('--json', action='store_true')
+    p = sub.add_parser('stop')
+    p.add_argument('name')
+    p.add_argument('why', nargs='?', default='')
     p = sub.add_parser('reap')
     p.add_argument('--dry-run', action='store_true')
     p = sub.add_parser('add')
@@ -976,11 +1064,13 @@ def main():
         return up(a.name, a.why)
     if a.cmd == 'down':
         return down(a.name)
+    if a.cmd == 'stop':
+        return force_stop(a.name, a.why)
     if a.cmd == 'reap':
         return reap(a.dry_run)
     if a.cmd == 'add':
         return add(a)
-    return show()
+    return show(getattr(a, 'json', False))
 
 
 if __name__ == '__main__':

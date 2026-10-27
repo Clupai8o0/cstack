@@ -23,7 +23,8 @@ Everything is a symlink back to this shared folder ($CLUPAI_HOME), so there is o
   ui        ui/palette.json  regenerated from the kitty accent (ui/palette.py)
             <each Claude config dir>/statusline.py <- ui/statusline.py, and settings.json statusLine, theme,
                                                   the Codex MCP allow rule and env CLAUDE_ENV (auto-compact window),
-                                                  and the CLAUDE_HOOKS rows (agent-requested resets, hooks/reset.py)
+                                                  and the CLAUDE_HOOKS rows (agent-requested resets, hooks/reset.py;
+                                                  session alerts, hooks/alerts.py)
             (OpenCode keeps its own default theme on purpose: the owner prefers it, 2026-09-21)
             ~/.codex/config.toml [tui]  status_line, terminal_title and theme set to the shared list
 
@@ -94,12 +95,34 @@ CLAUDE_ALLOW = ['mcp__codex__codex', 'mcp__codex__codex-reply']  # the Codex rev
 # tokens of context (usage_report.py), so sessions auto-compact at a 250k window instead of near 1M. /autocompact
 # changes it for one session.
 CLAUDE_ENV = {'CLAUDE_CODE_AUTO_COMPACT_WINDOW': '250000'}
+# Claude Code mods (function-hook plugins) every account loads: each folder under $CLUPAI_HOME/mods/ with a
+# .claude-plugin/plugin.json, colon-separated in CLAUDE_CODE_PLUGIN_DIRS. Added 7 Oct 2026 for side-checklist.
+# A mod folder holding an OPT-IN file is skipped (load it per session with claude --plugin-dir). With no default
+# mods left, the env key is removed again.
+MODS = os.path.join(SHARED, 'mods')
+MOD_DIRS = sorted(os.path.join(MODS, d) for d in (os.listdir(MODS) if os.path.isdir(MODS) else [])
+                  if os.path.isfile(os.path.join(MODS, d, '.claude-plugin', 'plugin.json'))
+                  and not os.path.exists(os.path.join(MODS, d, 'OPT-IN')))
+CLAUDE_ENV_DROP = []
+if MOD_DIRS:
+    CLAUDE_ENV['CLAUDE_CODE_PLUGIN_DIRS'] = ':'.join(MOD_DIRS)
+else:
+    CLAUDE_ENV_DROP.append('CLAUDE_CODE_PLUGIN_DIRS')
 # Hooks every Claude account must have, as (event, matcher or None, command, timeout). Added when missing, never
 # removed or reordered; the older hooks in settings.json were added by hand and stay as they are.
 RESET = os.path.join(SHARED, 'hooks', 'reset.py')
+ALERTS = os.path.join(SHARED, 'hooks', 'alerts.py')
 CLAUDE_HOOKS = [('Stop', None, f'python3 {RESET} stop', 10),
-                ('SessionStart', 'clear|compact', f'python3 {RESET} session-start', 10)]
-CLAUDE_THEME = 'dark-ansi'   # Claude's theme that draws in the terminal's own 16 colours, i.e. kitty's Catppuccin
+                ('SessionStart', 'clear|compact', f'python3 {RESET} session-start', 10),
+                # session alerts: done / needs-you sounds, Remote Control after 5 min unanswered (hooks/alerts.py)
+                ('Stop', None, f'python3 {ALERTS} done', 10),
+                ('Notification', None, f'python3 {ALERTS} needs-you', 10),
+                ('UserPromptSubmit', None, f'python3 {ALERTS} clear prompt', 5),
+                ('PostToolUse', None, f'python3 {ALERTS} clear tool', 5),
+                ('SessionEnd', None, f'python3 {ALERTS} clear end', 5)]
+# 'dark', not 'dark-ansi' (owner, 7 Oct 2026): dark-ansi fills docked mod panes with kitty's color8 grey, which washed
+# out the side-checklist pane; dark draws its own colours instead of kitty's Catppuccin 16.
+CLAUDE_THEME = 'dark'
 CODEX_TUI = {   # Codex has no custom statusline command; these are its closest built-in items
     'status_line': ['model-with-reasoning', 'current-dir', 'git-branch', 'context-used', 'five-hour-limit',
                     'weekly-limit'],
@@ -234,7 +257,13 @@ def install_dsh_hooks(check):
             say('would', f'mount the hooks bridge in {patch}')
             continue
         backup(patch, '.bak-shared-agent-layer')
-        open(patch, 'a').write(row)
+        # A fresh profile holds a bare `[]` placeholder. Appending a row after
+        # it makes invalid YAML and dsh refuses to boot that profile.
+        body = [l.strip() for l in text.splitlines()
+                if l.strip() and not l.lstrip().startswith('#')]
+        if body == ['[]']:
+            text = text.replace('[]', '', 1)
+        open(patch, 'w').write(text + row)
         say('mounted', f'hooks bridge in {os.path.relpath(patch, HOME)}')
 
 
@@ -269,6 +298,30 @@ def install_kimi_hooks(check):
     say('set', f'hooks block in {os.path.relpath(path, HOME)}')
 
 
+def grok_hooks_found(text, script):
+    """Which of our hook groups grok's config.toml already holds, in any layout: 'none', 'same' (exactly GROK_HOOKS,
+    each once, with Claude-compat hooks off) or 'other' (anything else, or the file does not parse)."""
+    try:
+        import tomllib                             # Python 3.11+
+    except ImportError:
+        tomllib = None                             # older Python: skip the parse check below
+    from collections import Counter
+    if tomllib is None:                            # older Python: a plain text check instead of a parse
+        return 'other' if 'agent_hook.py --agent grok' in text else 'none'
+    try:
+        cfg = tomllib.loads(text)
+        have = Counter((event, str(h.get('command')), h.get('timeout'))
+                       for event, groups in cfg.get('hooks', {}).items() for g in groups for h in g.get('hooks', [])
+                       if 'agent_hook.py --agent grok' in str(h.get('command')))
+        off = cfg.get('compat', {}).get('claude', {}).get('hooks') is False
+    except (tomllib.TOMLDecodeError, AttributeError, TypeError):
+        return 'other'
+    if not have:
+        return 'none'
+    want = Counter((event, f'python3 {script} --agent grok {name}', timeout) for event, name, timeout in GROK_HOOKS)
+    return 'same' if have == want and off else 'other'
+
+
 def install_grok_hooks(check):
     """Keep one managed block at the end of ~/.grok/config.toml: Claude-compat hooks off, and native hook groups.
     [[hooks.X]] is an array of tables, so it may follow any other table. If [compat.claude] already exists outside
@@ -281,10 +334,20 @@ def install_grok_hooks(check):
     if not os.path.exists(path):
         return say('missing', f'{path} (run grok once first)')
     text = open(path).read()
+    script = os.path.join(SHARED, 'hooks', 'agent_hook.py')
     if GROK_BEGIN in text and GROK_END in text:
         head, _, rest = text.partition(GROK_BEGIN)
         _, _, tail = rest.partition(GROK_END)
     else:
+        # grok rewrites config.toml in its own layout and drops every comment, the markers too (25 Sep 2026). A new
+        # block on top of hooks that are already there would run each hook twice, so look at what the file holds.
+        found = grok_hooks_found(text, script)
+        if found == 'same':
+            return
+        if found == 'other':
+            return say('KEPT', f'{path}: has agent_hook.py hooks without the managed markers, and they differ from '
+                               f'GROK_HOOKS, compat hooks are on, or the file does not parse — delete those hook '
+                               f'groups by hand, then sync again')
         head, tail = text.rstrip('\n') + '\n\n', '\n'
     compat = re.compile(r'\s*\[\s*compat\s*\.\s*(claude|"claude")\s*\]\s*(#.*)?$')
 
@@ -303,7 +366,6 @@ def install_grok_hooks(check):
     head_l, tail_l = head.split('\n'), tail.split('\n')
     theirs = hooks_off(head_l) or hooks_off(tail_l)   # the user's own [compat.claude], outside the block
     head, tail = '\n'.join(head_l), '\n'.join(tail_l)
-    script = os.path.join(SHARED, 'hooks', 'agent_hook.py')
     rows = [GROK_BEGIN]
     if not theirs:
         rows += ['[compat.claude]', 'hooks = false', '']
@@ -422,6 +484,10 @@ def install_ui(check):
                 if env.get(key) != value:
                     env[key] = value
                     changed = True
+            for key in CLAUDE_ENV_DROP:
+                if key in env:
+                    del env[key]
+                    changed = True
             hooks = d.get('hooks')
             if not isinstance(hooks, dict):
                 hooks = d['hooks'] = {}
@@ -429,7 +495,8 @@ def install_ui(check):
                 groups = hooks.get(event)
                 if not isinstance(groups, list):
                     groups = hooks[event] = []
-                if any(isinstance(h, dict) and h.get('command') == cmd
+                tail = lambda c: c[c.find('/hooks/') + 1:] if isinstance(c, str) and '/hooks/' in c else c
+                if any(isinstance(h, dict) and tail(h.get('command')) == tail(cmd)
                        for g in groups if isinstance(g, dict) for h in g.get('hooks') or []):
                     continue
                 group = {'matcher': matcher} if matcher else {}
@@ -438,12 +505,13 @@ def install_ui(check):
                 changed = True
             return changed
         edit_json(os.path.join(home, 'settings.json'), claude_settings, check,
-                  'statusLine, theme, Codex MCP allow, auto-compact env + reset hooks')
+                  'statusLine, theme, Codex MCP allow, auto-compact + mods env, reset + alert hooks')
     set_codex_tui(check)
 
 
 def git_ignore_locally(repo, name, check):
-    """Add /name to the exclude file git reads, so the AGENTS.md link never shows in git status or a commit.
+    """Add /name (a path from the repo's top) to the exclude file git reads, so the AGENTS.md link never shows
+    in git status or a commit.
 
     The pattern is anchored (/AGENTS.md) so a real AGENTS.md deeper in the tree stays visible, and the path
     comes from git itself: a linked worktree's own info/exclude is NOT read, only the common dir's."""
@@ -526,10 +594,12 @@ def install_project_rules(roots, check):
                         say('imports', f'{claude_md} imports AGENTS.md and adds {extra} lines outside models never read')
                     continue               # a real briefing, not our link: nothing to link, nothing to git-ignore
                 top = git(repo, 'rev-parse', '--show-toplevel')
-                if not top or os.path.realpath(top) != os.path.realpath(repo):
-                    continue                       # only a repo's own top level, never a subfolder or umbrella
+                if not top:
+                    continue                       # an umbrella folder is in no repo: never link there
                 link(claude_md, agents_md, check)
-                git_ignore_locally(repo, 'AGENTS.md', check)
+                # a folder inside a repo is git-ignored by its path from the repo's top
+                name = os.path.relpath(os.path.join(os.path.realpath(repo), 'AGENTS.md'), os.path.realpath(top))
+                git_ignore_locally(top, name, check)
 
 
 def main():

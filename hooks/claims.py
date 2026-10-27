@@ -14,6 +14,7 @@ Key = path relative to the worktree root, so the same file in two worktrees coun
                                the session to update its note during this turn (a nudge, not a forced extra call).
   claims.py session-end        SessionEnd hook: logs and drops this session's claims and notes in every repo it touched.
   claims.py list [DIR]         show live notes and claims for the repo at DIR (default cwd)
+  claims.py list --json [DIR]  the same as JSON {top, here, claims, notes}, read-only (MonoCode's file tags)
   claims.py note TEXT          from inside a session: status for the cwd's repo, "doing now; done/tried: ..."
   claims.py note --clear       remove that note
   claims.py release [DIR]      from inside a session: drop its claims and note in the repo at DIR
@@ -722,6 +723,36 @@ def show(cwd):
     return 0
 
 
+def snapshot(cwd):
+    """Live claims and notes for the repo at cwd, for MonoCode's tags. Read-only: no lock, no prune written back
+    (the store is replaced atomically, so a plain read is whole)."""
+    here = os.path.realpath(cwd)
+    repo = repo_of(here)
+    if not repo:
+        return {'top': None, 'here': None, 'claims': [], 'notes': []}
+    top, store = repo
+    here = os.path.relpath(here, top)  # where cwd sits in the worktree, so a caller can map paths that use a symlink
+    try:
+        data = json.load(open(store))
+    except (OSError, ValueError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    live = live_sessions()
+    cutoff = time.time() - EXPIRE_H * 3600
+
+    def rows(key, fields):
+        out = []
+        for c in data.get(key) if isinstance(data.get(key), list) else []:
+            if isinstance(c, dict) and isinstance(c.get('session'), str) and c['session'] in live and isinstance(c.get('at'), (int, float)) \
+                    and c['at'] > cutoff:
+                out.append({**{f: c.get(f) for f in fields}, 'name': live[c['session']]})
+        return out
+    return {'top': top, 'here': here,
+            'claims': rows('claims', ('file', 'worktree', 'session', 'branch', 'at')),
+            'notes': rows('notes', ('text', 'worktree', 'session', 'branch', 'at', 'noted_at'))}
+
+
 def note(words):
     sid = current_session()
     repo = repo_of(os.path.realpath(os.getcwd()))
@@ -842,6 +873,9 @@ if __name__ == '__main__':
     try:
         if cmd in hooks:
             sys.exit(hooks[cmd]())
+        if cmd == 'list' and arg == '--json':
+            print(json.dumps(snapshot(sys.argv[3] if len(sys.argv) > 3 else os.getcwd())))
+            sys.exit(0)
         if cmd == 'list':
             sys.exit(show(arg))
         if cmd == 'note':

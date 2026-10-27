@@ -3,11 +3,15 @@
 #
 #   ./install.sh                 print what would happen, change nothing
 #   ./install.sh --yes           do it
-#   ./install.sh --yes --settings   also merge the hooks into each settings.json (backup first)
+#   ./install.sh --yes --settings   also merge the hooks into each settings.json (backup first; includes the
+#                                   reset.py and alerts.py hooks, which sync-agents.py --ui also adds)
 #   ./install.sh --yes --agents     also run scripts/sync-agents.py --check (read-only) and print the next step
 #   ./install.sh --yes --no-rules   leave your CLAUDE.md alone (add @$CLUPAI_HOME/rules/CLAUDE.md to it yourself)
 #
 # Without --no-rules, <config dir>/CLAUDE.md is REPLACED by a link to rules/CLAUDE.md (the old one is backed up).
+# Optional config, copied by hand: examples/stacks.example.json -> stacks.json, examples/alerts.example.json -> alerts.json.
+# Mods (mods/*/ with .claude-plugin/plugin.json, no OPT-IN file) load only after sync-agents.py --ui sets
+# CLAUDE_CODE_PLUGIN_DIRS; install.sh never sets it.
 #
 # Env:
 #   CLUPAI_HOME   where the shared layer lives (default ~/clupai; linked to this repo if missing)
@@ -33,7 +37,7 @@ for arg in "$@"; do
         --settings) SETTINGS=1 ;;
         --agents) AGENTS=1 ;;
         --no-rules) RULES=0 ;;
-        -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
         *) echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -105,7 +109,8 @@ plan "run     scripts/build_index.py (writes skills/INDEX.md)"
 if [ "$AGENTS" = 1 ]; then
     plan "run     scripts/sync-agents.py --check (read-only). The real run, which you start yourself, edits"
     plan "        Codex hooks.json/config.toml, kimi and grok config.toml, dsh profiles; with --ui also Claude"
-    plan "        settings.json (statusLine, theme) and Codex [tui]"
+    plan "        settings.json (statusLine, theme, Codex MCP allow, env CLAUDE_CODE_AUTO_COMPACT_WINDOW and"
+    plan "        CLAUDE_CODE_PLUGIN_DIRS for the mods/ folders, reset.py and alerts.py hooks) and Codex [tui]"
 fi
 
 echo "CLUPAI_HOME=$CLUPAI_HOME"
@@ -154,11 +159,15 @@ if os.path.exists(path):
     shutil.copy2(path, f'{path}.bak-clupai-{stamp}')
 hooks = data.setdefault('hooks', {})
 added = 0
+def tail(cmd):
+    # "hooks/alerts.py done", whatever path is in front: sync-agents.py --ui writes the same hooks with an absolute path
+    return cmd[cmd.find('/hooks/') + 1:] if '/hooks/' in cmd else cmd
 for event, groups in want['hooks'].items():
-    have = json.dumps(hooks.get(event, []))
+    have = [tail(h.get('command', '')) for g in hooks.get(event, []) if isinstance(g, dict)
+            for h in g.get('hooks') or [] if isinstance(h, dict)]
     for g in groups:
         cmd = g['hooks'][0]['command']
-        if json.dumps(cmd) not in have:
+        if tail(cmd) not in have:
             hooks.setdefault(event, []).append(g)
             added += 1
 allow = data.setdefault('permissions', {}).setdefault('allow', [])
@@ -180,7 +189,8 @@ if [ "$AGENTS" = 1 ]; then
     echo
     echo "Read the list above. To apply it (backups are timestamped):"
     echo "  CLUPAI_HOME=\"$CLUPAI_HOME\" python3 \"$REPO/scripts/sync-agents.py\"            # agents only"
-    echo "  add --ui for the shared statusline and theme, --repos DIR for project AGENTS.md links"
+    echo "  add --ui for the shared statusline, theme, mods (CLAUDE_CODE_PLUGIN_DIRS) and reset/alert hooks,"
+    echo "  --repos DIR for project AGENTS.md links"
 fi
 
 echo

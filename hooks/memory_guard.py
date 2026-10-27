@@ -155,7 +155,7 @@ def pretool():
     reason = (f"Memory is low (pressure level {mem['level']}, swap {mem['swap_pct']}% used, {len(ss)} Claude sessions open, "
               f"{len(idle)} idle 6h+ holding {sum(s['gb'] for s in idle):.1f} GB). Do not start new agents, workflows or heavy commands now. "
               "Finish the current step inline, save progress to the project handoff file, and put this line in your end recap: "
-              "'Memory low: close idle sessions with `claude-sessions close-idle 6`'.")
+              "'Memory low: close idle sessions with `memory_guard.py close-idle 6`'.")
     print(json.dumps({'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'deny', 'permissionDecisionReason': reason}}))
     return 0
 
@@ -166,7 +166,7 @@ def session_start():
     if not mem['tight'] and len(idle) < 3:
         return 0
     msg = (f"Machine memory: pressure level {mem['level']}, swap {mem['swap_pct']}% used. {len(idle)} other Claude sessions have been idle 6h+ "
-           f"({sum(s['gb'] for s in idle):.1f} GB). Keep agent fan-out small. If this is an interactive session with the user, mention `claude-sessions close-idle 6` in the end recap; in a headless run, ignore this.")
+           f"({sum(s['gb'] for s in idle):.1f} GB). Keep agent fan-out small. If this is an interactive session with the user, mention `memory_guard.py close-idle 6` in the end recap; in a headless run, ignore this.")
     print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart', 'additionalContext': msg}}))
     return 0
 
@@ -191,7 +191,7 @@ def main():
         except ValueError:
             hours = -1
         if not (0 < hours < 10000):
-            print('usage: claude-sessions close-idle HOURS   (HOURS must be a positive number)')
+            print('usage: memory_guard.py close-idle HOURS   (HOURS must be a positive number)')
             return 2
         closed, every = 0, sessions(verify=True)
         # An OpenCode or Codex process can host several sessions, each with its own record. Signalling the pid

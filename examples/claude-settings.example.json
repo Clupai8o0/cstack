@@ -1,5 +1,5 @@
 {
-  "_about": "Merge the hooks block into ~/.claude/settings.json (install.sh --settings does it with a backup). Paths use $CLUPAI_HOME, default ~/clupai.",
+  "_about": "Merge the hooks block into ~/.claude/settings.json (install.sh --settings does it with a backup). Paths use $CLUPAI_HOME, default ~/clupai. reset.py and alerts.py hooks are the ones scripts/sync-agents.py --ui also adds.",
   "hooks": {
     "SessionStart": [
       {
@@ -25,6 +25,16 @@
           {
             "type": "command",
             "command": "python3 \"${CLUPAI_HOME:-$HOME/clupai}\"/hooks/memory_recall.py session-start",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLUPAI_HOME:-$HOME/clupai}\"/hooks/reset.py session-start",
             "timeout": 10
           }
         ]
@@ -55,6 +65,15 @@
             "type": "command",
             "command": "python3 \"${CLUPAI_HOME:-$HOME/clupai}\"/hooks/memory_recall.py prompt",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLUPAI_HOME:-$HOME/clupai}\"/hooks/alerts.py clear prompt",
+            "timeout": 5
           }
         ]
       }
@@ -99,6 +118,57 @@
           {
             "type": "command",
             "command": "python3 \"${CLUPAI_HOME:-$HOME/clupai}\"/hooks/claims.py session-end",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLUPAI_HOME:-$HOME/clupai}\"/hooks/alerts.py clear end",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLUPAI_HOME:-$HOME/clupai}\"/hooks/alerts.py clear tool",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLUPAI_HOME:-$HOME/clupai}\"/hooks/reset.py stop",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLUPAI_HOME:-$HOME/clupai}\"/hooks/alerts.py done",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLUPAI_HOME:-$HOME/clupai}\"/hooks/alerts.py needs-you",
             "timeout": 10
           }
         ]

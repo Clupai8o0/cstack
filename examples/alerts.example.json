@@ -1,0 +1,16 @@
+{
+  "_about": "Optional. Copy to $CLUPAI_HOME/alerts.json and keep only the keys you change; hooks/alerts.py ignores unknown keys. Values below are the defaults in hooks/alerts.py. Env CLAUDE_ALERTS_DELAY overrides delay.",
+  "delay": 300,
+  "done_sound": "Glass",
+  "needs_sound": "Hero",
+  "volume": 0.7,
+  "quick": 20,
+  "present": 30,
+  "extend": 60,
+  "give_up": 1800,
+  "done": true,
+  "needs": true,
+  "remote_control": true,
+  "follow_places": true,
+  "places_fresh": 600
+}

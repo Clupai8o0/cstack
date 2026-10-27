@@ -5,6 +5,10 @@
 > **Update, 23 Sep 2026:** Opus 5.5 has since replaced Opus 5 as the default worker (same pass rate, 22% cheaper in
 > the [bake-off](bake-off.md)) and Fable 5.1 as the Claude reviewer. This benchmark was not re-run on Opus 5.5, so the
 > numbers below are Opus 5's. The effort findings (pin low, avoid xhigh) still apply.
+>
+> **Update, 27 Oct 2026:** Sonnet 5 and Haiku 4.5 are no longer used. Sonnet 5.5 low and Haiku 5.5 low now take coding a
+> test decides, Opus 5.5 high writes what people read, and Codex moved to GPT-6 Astra. Current numbers are in the
+> [bake-off](bake-off.md); current rules in [token-economy](token-economy.md).
 
 ## Method
 

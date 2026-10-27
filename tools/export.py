@@ -43,6 +43,13 @@ ALLOWLIST = [
     (SHARED, 'hooks/stacks.py', 'hooks/stacks.py'),
     (SHARED, 'hooks/reset.py', 'hooks/reset.py'),
     (SHARED, 'hooks/session_mirror.py', 'hooks/session_mirror.py'),
+    (SHARED, 'hooks/alerts.py', 'hooks/alerts.py'),
+    (SHARED, 'mods/side-checklist/.claude-plugin/plugin.json', 'mods/side-checklist/.claude-plugin/plugin.json'),
+    (SHARED, 'mods/side-checklist/hooks/hooks.json', 'mods/side-checklist/hooks/hooks.json'),
+    (SHARED, 'mods/side-checklist/hooks/register.tsx', 'mods/side-checklist/hooks/register.tsx'),
+    (SHARED, 'mods/side-checklist/types/index.d.ts', 'mods/side-checklist/types/index.d.ts'),
+    (SHARED, 'mods/side-checklist/tsconfig.json', 'mods/side-checklist/tsconfig.json'),
+    (SHARED, 'mods/side-checklist/tests/checklist.test.tsx', 'mods/side-checklist/tests/checklist.test.tsx'),
     (SHARED, 'ui/statusline.py', 'ui/statusline.py'),
     (SHARED, 'ui/palette.py', 'ui/palette.py'),
     (SHARED, 'ui/palette.json', 'ui/palette.json'),
@@ -62,6 +69,7 @@ ALLOWLIST = [
     (SHARED, 'usage_report.py', 'scripts/usage_report.py'),
     (SKILLS, 'engineering/production-ready/SKILL.md', 'skills/production-ready/SKILL.md'),
     (SKILLS, 'engineering/production-ready/checklist.md', 'skills/production-ready/checklist.md'),
+    (SKILLS, 'engineering/production-ready/security-lists.md', 'skills/production-ready/security-lists.md'),
     (SKILLS, '_core/tool-scoping/SKILL.md', 'skills/_core/tool-scoping/SKILL.md'),
     (SKILLS, '_core/vault-skills/SKILL.md', 'skills/_core/vault-skills/SKILL.md'),
     (SKILLS, '_tools/build_index.py', 'scripts/build_index.py'),
@@ -129,6 +137,18 @@ CODE_REWRITES += [
     ('.md', r'claude-shared/usage_report\.py', 'scripts/usage_report.py'),
     ('', r'the three Claude accounts', 'the Claude accounts'),
     ('hooks/reset.py', r' \(guardrail g25\)', ''),
+    # private folder names and guardrail ids left in docstrings; the public layout is the repo root
+    ('hooks/alerts.py', r'claude-shared/alerts\.json', '$CLUPAI_HOME/alerts.json'),
+    ('hooks/alerts.py', r', guardrail g25\)', ')'),
+    ('scripts/sync-agents.py', r'claude-shared/mods/', '$CLUPAI_HOME/mods/'),
+    ('scripts/second_opinion.py', r'\(claude-shared, the skills/commands dirs\)', '($CLUPAI_HOME, the skills/commands dirs)'),
+    ('scripts/second_opinion.py', r'that is the g65 bug', 'an over-broad allow'),
+    ('scripts/second_opinion.py', r'which is the g65 bug', 'which is the worse failure'),
+    ('scripts/second_opinion.py', r'\(that is the g65 class of bug\)', '(an over-broad allow)'),
+    # memory_guard names a private wrapper command; point at the script itself
+    ('hooks/memory_guard.py', r'claude-sessions close-idle', 'memory_guard.py close-idle'),
+    ('skills/_core/token-economy/SKILL.md', r'full data in the vault bake-off note', 'full data in `docs/bake-off.md`'),
+    ('bakeoff/bakeoff.py', r'^(    # Meta Muse Code CLI .*)$', r'\1 (owner-only lane)'),
 ]
 
 # Safety patches for the public copy of sync-agents.py. Each is an exact literal that must appear exactly `count`
@@ -142,6 +162,12 @@ PATCHES = [
      "        with open(os.path.join(HOME, '.codex', 'config.toml'), 'rb') as f:\n"),
     ('scripts/second_opinion.py', 1, "    except (OSError, ValueError):\n        return None\n",
      "    except (ImportError, OSError, ValueError):\n        return None\n"),
+    # the read wall re-allows the layer itself: a '$CLUPAI_HOME' string would not expand, so use the variable
+    ('scripts/second_opinion.py', 1,
+     "    '$CLUPAI_HOME',  # hooks, rules, model-policy/guardrails/queues json\n"
+     "    '$CLUPAI_HOME/skills/_core',                      # core skills the CLIs symlink in\n",
+     "    CLUPAI_HOME,  # hooks, rules, model-policy/guardrails/queues json\n"
+     "    os.path.join(CLUPAI_HOME, 'skills', '_core'),     # core skills the CLIs symlink in\n"),
     # usage_report.py: the report note lives in the repo root, not a vault three folders up
     ('scripts/usage_report.py', 1,
      "VAULT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..'))\n",
@@ -159,11 +185,15 @@ PATCHES = [
      "import subprocess, sys\n"
      "subprocess.run([sys.executable, os.path.join(LIB, '_tools', 'build_graph_maps.py')], check=False)\n", ''),
     # tomllib is Python 3.11+; older Pythons skip the parse check instead of crashing
-    (SYNC, 1, '    import tomllib\n',
+    (SYNC, 2, '    import tomllib\n',
      '    try:\n'
      '        import tomllib                             # Python 3.11+\n'
      '    except ImportError:\n'
      '        tomllib = None                             # older Python: skip the parse check below\n'),
+    (SYNC, 1, '    try:\n        cfg = tomllib.loads(text)\n',
+     '    if tomllib is None:                            # older Python: a plain text check instead of a parse\n'
+     "        return 'other' if 'agent_hook.py --agent grok' in text else 'none'\n"
+     '    try:\n        cfg = tomllib.loads(text)\n'),
     (SYNC, 1, '        cfg = tomllib.loads(new)\n',
      "        cfg = tomllib.loads(new) if tomllib else {'compat': {'claude': {'hooks': False}}}\n"),
     # project links only when asked (--repos), and only at a git repo's own top level
@@ -179,13 +209,23 @@ PATCHES = [
      "        install_project_rules(a.repos or REPO_ROOTS, a.check)\n"),
     (SYNC, 1,
      "                link(claude_md, agents_md, check)\n"
-     "                if os.path.exists(os.path.join(repo, '.git')):   # an umbrella folder is not a repo\n"
-     "                    git_ignore_locally(repo, 'AGENTS.md', check)\n",
+     "                # a folder inside a repo (app/docs) is ignored by its path from the repo's top; an umbrella\n"
+     "                # folder is in no repo, so git finds no top and there is nothing to ignore\n"
      "                top = git(repo, 'rev-parse', '--show-toplevel')\n"
-     "                if not top or os.path.realpath(top) != os.path.realpath(repo):\n"
-     "                    continue                       # only a repo's own top level, never a subfolder or umbrella\n"
+     "                if top:\n"
+     "                    name = os.path.relpath(os.path.join(os.path.realpath(repo), 'AGENTS.md'), os.path.realpath(top))\n"
+     "                    git_ignore_locally(top, name, check)\n",
+     "                top = git(repo, 'rev-parse', '--show-toplevel')\n"
+     "                if not top:\n"
+     "                    continue                       # an umbrella folder is in no repo: never link there\n"
      "                link(claude_md, agents_md, check)\n"
-     "                git_ignore_locally(repo, 'AGENTS.md', check)\n"),
+     "                # a folder inside a repo is git-ignored by its path from the repo's top\n"
+     "                name = os.path.relpath(os.path.join(os.path.realpath(repo), 'AGENTS.md'), os.path.realpath(top))\n"
+     "                git_ignore_locally(top, name, check)\n"),
+    # hooks already merged by install.sh --settings carry a ${CLUPAI_HOME:-...} path; match on the hooks/<script> ending
+    (SYNC, 1, "                if any(isinstance(h, dict) and h.get('command') == cmd\n",
+     "                tail = lambda c: c[c.find('/hooks/') + 1:] if isinstance(c, str) and '/hooks/' in c else c\n"
+     "                if any(isinstance(h, dict) and tail(h.get('command')) == tail(cmd)\n"),
     # UI changes are opt-in
     (SYNC, 1, "    if not a.only or a.only == 'ui':\n        install_ui(a.check)\n",
      "    if a.ui or a.only == 'ui':\n        install_ui(a.check)\n"),

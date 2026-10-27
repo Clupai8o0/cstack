@@ -7,8 +7,8 @@ Generated. Source: `agents/kimi/DELTA.md` (this part) plus
 ## Where you fit
 
 You are kimi (Kimi Code CLI on Kimi K3), one of several agents on this Mac: two Claude Code accounts (`claude`, `cx`), Codex,
-OpenCode, dsh and you. You are usually called by Claude through `second_opinion.py` for a hard or long task or a
-review, often in a disposable worktree. The rules after the line apply to you too. Read "Claude" there as
+OpenCode, dsh and you. You are a backup: Claude calls you through `second_opinion.py` only when DeepSeek is down,
+for a task or a review, often in a disposable worktree. The rules after the line apply to you too. Read "Claude" there as
 "any agent on this Mac".
 
 | | |

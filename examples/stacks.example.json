@@ -1,5 +1,5 @@
 {
- "_doc": "Shared dev stacks, used through hooks/stacks.py. Copy to $CLUPAI_HOME/stacks.json or run `stacks.py add NAME --dir DIR`. runtime: docker-desktop or orbstack. The reaper stops a stack nobody has leased for grace_min minutes.",
+ "_doc": "Shared dev stacks, used through hooks/stacks.py. Copy to $CLUPAI_HOME/stacks.json or run `stacks.py add NAME --dir DIR`. runtime: docker-desktop or orbstack. The reaper stops a stack nobody has leased for grace_min minutes. devices: shared simulators/emulators for `stacks.py up NAME`; kind ios needs `device` (an Xcode simulator name), kind android needs `avd` (an AVD you created).",
  "runtime": "docker-desktop",
  "grace_min": 45,
  "lease_max_h": 8,
@@ -10,8 +10,31 @@
   "my-app": {
    "dir": "/absolute/path/to/my-app",
    "project": "my-app",
-   "files": ["docker-compose.yml"],
+   "files": [
+    "docker-compose.yml"
+   ],
    "services": []
+  }
+ },
+ "devices": {
+  "android-lite": {
+   "kind": "android",
+   "avd": "my_atd_avd",
+   "memory_mb": 2048,
+   "gpu": "host",
+   "note": "Android test image (ATD): about half the memory of a full image. Use by default."
+  },
+  "android": {
+   "kind": "android",
+   "avd": "my_full_avd",
+   "memory_mb": 2048,
+   "gpu": "host",
+   "note": "Full Android image. Use only when you need screenshots or Play services."
+  },
+  "ios": {
+   "kind": "ios",
+   "device": "iPhone 17 Pro",
+   "note": "Shared iOS simulator, booted headless."
   }
  }
 }
