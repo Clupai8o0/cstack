@@ -1,3 +1,5 @@
+![A terminal running a Claude Code session that lists which session is editing which file, with a checklist pane, a guardrail that stopped a git stash, and a close line lifted off it](./assets/banner.svg)
+
 # cstack
 
 **One shared rules, hooks and skills layer for Claude Code, Codex, OpenCode, DeepSeek, Kimi and Grok Build, tuned by measurement to spend fewer tokens.**
@@ -24,6 +26,8 @@ Take what's useful. Expect it to reflect my machine (macOS, kitty) and my habits
 5. When something breaks in a way another session could repeat, it becomes a guardrail every later session sees.
 
 ## Why it saves tokens
+
+![Bar chart: cost of 10 real app tasks, from $1.44 on Haiku 5.5 low to $26.95 on Fable 5.1; every model passed all 10](./assets/cost-chart.svg)
 
 Measured on my own work, Sep-Oct 2026. The routing benchmark used tasks built from real work with planted bugs and defects
 ([docs/routing.md](docs/routing.md)); the bake-off used real commits from one app ([docs/bake-off.md](docs/bake-off.md)).
@@ -146,6 +150,7 @@ and "ring at my places", which `hooks/alerts.py` follows. Details: [docs/monocod
 | `scripts/second_opinion.py` | Calls outside models through one sandboxed, policy-checked fallback ladder; `--review` sends only the git diff |
 | `scripts/sync-agents.py` | Generates each agent's `AGENTS.md` and links skills and hooks |
 | `scripts/build_index.py` | Rebuilds `skills/INDEX.md` |
+| `scripts/readme_charts.py` | Rebuilds the animated charts in `assets/`; its numbers are copied from `docs/bake-off.md`, so update both |
 | `output-styles/on-the-go.md` | Replies for reading on a phone: answer first, decisions as a checklist, recap at the end |
 | `ui/` | Shared statusline and palette |
 | `bakeoff/` | Generic harness to run your own model bake-off on your repo's history |
@@ -192,6 +197,8 @@ export CLUPAI_HOME=~/clupai        # add to your shell profile
 
 Dropped: DeepSeek V4 Pro, OpenCode Go and Zen, Haiku 4.5. GLM-5.3, Grok 4.6 and MiniMax M3 run through OpenRouter
 for second opinions only.
+
+![Dot plot: real bugs each reviewer found of 17, from 9-10 for Opus 5.5 high down to 3 for GPT-6.1 Sol](./assets/review-chart.svg)
 
 Bake-off in one line each (10 real tasks from a production React Native + Firebase app, 5 review cases with 17 real bugs):
 

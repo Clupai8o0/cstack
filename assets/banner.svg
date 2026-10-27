@@ -1,0 +1,227 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 530" width="1200" height="530"
+     role="img" aria-labelledby="bt bd" font-family="sans-serif">
+  <title id="bt">cstack: one rules, hooks and skills layer for six agent CLIs</title>
+  <desc id="bd">A kitty terminal running a Claude Code session that lists which session holds which file.
+    Lifted off it: a checklist pane with two steps ticked, a guardrail that stopped a git stash, and the
+    close line every reply ends on.</desc>
+
+  <!--
+    Palette: Catppuccin Mocha with the mauve accent, from ui/palette.json.
+
+    Numbers on this banner and where they come from (update both together):
+      $1.44  Haiku 5.5 low, 10/10 app tasks          docs/bake-off.md, main table (10 Oct)
+      2.7x   Opus 5 xhigh vs low cost per task       docs/routing.md ($0.90 vs $0.33)
+      59%    one week's Claude spend past 200k ctx   docs/token-economy.md (week to 23 Sep)
+    Session names, files and the checklist are illustrative.
+  -->
+
+  <defs>
+    <clipPath id="frame"><rect width="1200" height="530" rx="20"/></clipPath>
+
+    <radialGradient id="bloom" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#cba6f7" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#cba6f7" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bloom2" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#89b4fa" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#89b4fa" stop-opacity="0"/>
+    </radialGradient>
+
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#cdd6f4" stroke-opacity="0.03"/>
+    </pattern>
+
+    <linearGradient id="topHi" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+
+    <filter id="lift" x="-45%" y="-45%" width="190%" height="190%">
+      <feDropShadow dx="0" dy="20" stdDeviation="22" flood-color="#000" flood-opacity="0.6"/>
+    </filter>
+    <filter id="liftSm" x="-45%" y="-45%" width="190%" height="190%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.55"/>
+    </filter>
+    <filter id="liftWin" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="26" stdDeviation="34" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+
+    <style>
+      text { font-family: "Inter", ui-sans-serif, system-ui, -apple-system,
+             "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+      .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+              Consolas, "Liberation Mono", monospace; }
+
+      @keyframes bobA { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-7px) } }
+      @keyframes bobB { 0%,100% { transform: translateY(0) } 50% { transform: translateY(6px) } }
+      @keyframes bobC { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-5px) } }
+      .bobA { animation: bobA 7s   ease-in-out infinite; }
+      .bobB { animation: bobB 8.5s ease-in-out infinite; }
+      .bobC { animation: bobC 11s  ease-in-out infinite; }
+
+      @keyframes caret { 0%,44% { opacity: 1 } 50%,94% { opacity: 0 } 100% { opacity: 1 } }
+      .caret { animation: caret 1.1s steps(1,end) infinite; }
+
+      @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.35 } }
+      .pulse { animation: pulse 2.4s ease-in-out infinite; }
+
+      /* The context meter fills, then resets: dash offset, not width. */
+      @keyframes ctx { 0% { stroke-dashoffset: 60 } 85%,100% { stroke-dashoffset: 22 } }
+      .ctx { animation: ctx 9s cubic-bezier(0.16,1,0.3,1) infinite; }
+
+      @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+    </style>
+  </defs>
+
+  <g clip-path="url(#frame)">
+    <rect width="1200" height="530" fill="#11111b"/>
+    <ellipse cx="960" cy="90" rx="420" ry="260" fill="url(#bloom)"/>
+    <ellipse cx="160" cy="500" rx="360" ry="200" fill="url(#bloom2)"/>
+    <rect width="1200" height="530" fill="url(#grid)"/>
+
+    <!-- Copy column -->
+    <text x="56" y="108" font-size="11" font-weight="600" letter-spacing="2.6" fill="#cba6f7">CSTACK · BUILT BY CLUPAI</text>
+    <g fill="#cdd6f4" font-size="40" font-weight="600" letter-spacing="-1.6">
+      <text x="56" y="158">Six agent CLIs.</text>
+      <text x="56" y="202">One set of rules.</text>
+      <text x="56" y="246" fill="#cba6f7">Fewer tokens.</text>
+    </g>
+    <g fill="#a6adc8" font-size="14" letter-spacing="-0.1">
+      <text x="56" y="290">Claims, queues, guardrails and memory shared</text>
+      <text x="56" y="309">by Claude Code, Codex, OpenCode, DeepSeek,</text>
+      <text x="56" y="328">Kimi and Grok, all running on one Mac.</text>
+    </g>
+
+    <g>
+      <text x="56"  y="384" fill="#cdd6f4" font-size="22" font-weight="600" letter-spacing="-0.6">$1.44</text>
+      <text x="196" y="384" fill="#cdd6f4" font-size="22" font-weight="600" letter-spacing="-0.6">2.7×</text>
+      <text x="330" y="384" fill="#cdd6f4" font-size="22" font-weight="600" letter-spacing="-0.6">59%</text>
+      <g fill="#7f849c" font-size="9.5" letter-spacing="1">
+        <text x="56"  y="402">10 TASKS, HAIKU</text>
+        <text x="196" y="402">XHIGH, NO GAIN</text>
+        <text x="330" y="402">SPEND PAST 200K</text>
+      </g>
+    </g>
+
+    <rect x="56" y="436" width="150" height="34" rx="17" fill="#181825" stroke="#313244"/>
+    <text class="mono" x="74" y="457" font-size="12.5" fill="#cdd6f4"><tspan fill="#cba6f7">$</tspan> ./install.sh</text>
+    <text x="222" y="457" font-size="11.5" fill="#7f849c">prints the plan, changes nothing</text>
+
+    <!-- The terminal -->
+    <g filter="url(#liftWin)">
+      <rect x="540" y="60" width="600" height="380" rx="14" fill="#1e1e2e" stroke="#313244"/>
+    </g>
+    <line x1="556" y1="60.5" x2="1124" y2="60.5" stroke="url(#topHi)"/>
+
+    <g fill="#45475a">
+      <circle cx="560" cy="80" r="4"/><circle cx="574" cy="80" r="4"/><circle cx="588" cy="80" r="4"/>
+    </g>
+    <rect x="608" y="70" width="98" height="20" rx="10" fill="#313244"/>
+    <text class="mono" x="620" y="84" font-size="10.5" fill="#cdd6f4">cstack-9a</text>
+    <text class="mono" x="724" y="84" font-size="10.5" fill="#7f849c">monocode-56</text>
+    <text class="mono" x="822" y="84" font-size="10.5" fill="#7f849c">cx · atlas</text>
+
+    <g class="mono" font-size="12">
+      <text x="562" y="126" fill="#cdd6f4"><tspan fill="#cba6f7">›</tspan> claims.py list</text>
+    </g>
+    <g class="mono" font-size="11.5">
+      <text x="576" y="152" fill="#89dceb">cstack-9a</text>
+      <text x="700" y="152" fill="#cdd6f4">README.md</text>
+      <text x="862" y="152" fill="#a6e3a1">editing</text>
+
+      <text x="576" y="172" fill="#89dceb">monocode-56</text>
+      <text x="700" y="172" fill="#cdd6f4">src/tabs.ts</text>
+      <text x="862" y="172" fill="#a6e3a1">editing</text>
+
+      <text x="576" y="192" fill="#89dceb">cx:atlas</text>
+      <text x="700" y="192" fill="#cdd6f4">firestore.rules</text>
+      <text class="pulse" x="862" y="192" fill="#f9e2af">queued: deploy</text>
+    </g>
+
+    <text class="mono" x="562" y="228" font-size="11.5" fill="#a6adc8"><tspan fill="#fab387">Effort:</tspan> medium now, high needed</text>
+    <g fill="#313244">
+      <rect x="562" y="242" width="380" height="7" rx="3.5"/>
+      <rect x="562" y="256" width="330" height="7" rx="3.5"/>
+      <rect x="562" y="270" width="250" height="7" rx="3.5"/>
+    </g>
+
+    <circle cx="566" cy="302" r="4" fill="#a6e3a1"/>
+    <text class="mono" x="578" y="306" font-size="11.5" fill="#cdd6f4">Write(assets/banner.svg)</text>
+    <g fill="#313244">
+      <rect x="578" y="318" width="290" height="7" rx="3.5"/>
+      <rect x="578" y="332" width="210" height="7" rx="3.5"/>
+    </g>
+
+    <text class="mono" x="562" y="374" font-size="12" fill="#cdd6f4"><tspan fill="#cba6f7">›</tspan> commit and push</text>
+    <rect class="caret" x="684" y="364" width="7" height="13" fill="#cba6f7"/>
+
+    <!-- Statusline, from ui/statusline.py's roles -->
+    <rect x="560" y="403" width="74" height="20" rx="10" fill="#cba6f7"/>
+    <text x="571" y="417" font-size="11" font-weight="600" fill="#11111b">Opus 5.5</text>
+    <g class="mono" font-size="11">
+      <text x="646" y="417" fill="#fab387">low</text>
+      <text x="682" y="417" fill="#89dceb">~/projects/cstack</text>
+      <text x="826" y="417" fill="#a6e3a1">main</text>
+    </g>
+    <line x1="872" y1="413" x2="932" y2="413" stroke="#313244" stroke-width="5" stroke-linecap="round"/>
+    <line class="ctx" x1="872" y1="413" x2="932" y2="413" stroke="#cba6f7" stroke-width="5" stroke-linecap="round"
+          stroke-dasharray="60" stroke-dashoffset="22"/>
+    <text class="mono" x="942" y="417" font-size="11" fill="#7f849c">84k</text>
+
+    <!-- Floater 1: the side-checklist pane -->
+    <g transform="rotate(3 1090 180)">
+      <g class="bobA">
+        <g filter="url(#lift)">
+          <rect x="1000" y="104" width="180" height="124" rx="12" fill="#181825" stroke="#45475a"/>
+        </g>
+        <text x="1014" y="126" font-size="10" font-weight="600" letter-spacing="1.4" fill="#7f849c">CHECKLIST</text>
+        <g font-size="11.5">
+          <rect x="1014" y="140" width="13" height="13" rx="3.5" fill="#a6e3a1"/>
+          <path d="M1017 146.5l2.6 2.6 4.6-5" fill="none" stroke="#11111b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="1035" y="151" fill="#7f849c">Rename to cstack</text>
+          <rect x="1014" y="166" width="13" height="13" rx="3.5" fill="#a6e3a1"/>
+          <path d="M1017 172.5l2.6 2.6 4.6-5" fill="none" stroke="#11111b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="1035" y="177" fill="#7f849c">Add a banner</text>
+          <rect x="1014.75" y="192.75" width="11.5" height="11.5" rx="3" fill="none" stroke="#7f849c" stroke-width="1.5"/>
+          <text x="1035" y="203" fill="#cdd6f4">Read and push</text>
+        </g>
+        <g filter="url(#liftSm)">
+          <rect x="1004" y="240" width="172" height="30" rx="15" fill="#11111b" stroke="#313244"/>
+        </g>
+        <circle cx="1020" cy="255" r="3.5" fill="#a6e3a1"/>
+        <text x="1030" y="259" font-size="11.5" fill="#bac2de">Your steps, ticked live</text>
+      </g>
+    </g>
+
+    <!-- Floater 2: a guardrail that fired -->
+    <g transform="rotate(-2.5 1050 330)">
+      <g class="bobB">
+        <g filter="url(#lift)">
+          <rect x="940" y="290" width="216" height="74" rx="12" fill="#181825" stroke="#45475a"/>
+        </g>
+        <rect x="954" y="304" width="42" height="18" rx="9" fill="#f38ba8"/>
+        <text x="962" y="317" font-size="10" font-weight="700" letter-spacing="0.8" fill="#11111b">STOP</text>
+        <text class="mono" x="1006" y="317" font-size="11.5" fill="#cdd6f4">git stash</text>
+        <rect x="954" y="334" width="170" height="6" rx="3" fill="#45475a"/>
+        <rect x="954" y="346" width="120" height="6" rx="3" fill="#313244"/>
+        <g filter="url(#liftSm)">
+          <rect x="950" y="376" width="196" height="30" rx="15" fill="#11111b" stroke="#313244"/>
+        </g>
+        <circle cx="966" cy="391" r="3.5" fill="#f38ba8"/>
+        <text x="976" y="395" font-size="11.5" fill="#bac2de">One failure, rule for all</text>
+      </g>
+    </g>
+
+    <!-- Floater 3: the close line -->
+    <g transform="rotate(-1.5 760 470)">
+      <g class="bobC">
+        <g filter="url(#lift)">
+          <rect x="590" y="442" width="340" height="58" rx="12" fill="#181825" stroke="#45475a"/>
+        </g>
+        <text x="606" y="463" font-size="9.5" font-weight="600" letter-spacing="1.3" fill="#7f849c">LAST LINE OF EVERY REPLY</text>
+        <text class="mono" x="606" y="486" font-size="12" fill="#a6e3a1">Safe to close: nothing left to do.</text>
+      </g>
+    </g>
+  </g>
+</svg>
